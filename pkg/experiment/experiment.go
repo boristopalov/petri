@@ -17,7 +17,7 @@ type Experiment interface {
 	Stop() error
 	// GetStatus returns current experiment status
 	GetStatus() status
-
+	// Steps through
 	Step(ctx context.Context) error
 }
 
@@ -28,24 +28,42 @@ type status struct {
 	Errors    []error
 }
 
-type BaseExperiment struct {
-	name        string
-	environment environment.Environment
-	config      *config.ExperimentConfig
-	metrics     Metrics
-	mu          sync.RWMutex
-	status      status
-}
-
-// Metrics tracks experiment metrics
 type Metrics interface {
 	RecordState(environment.State)
 }
 
-func NewExperiment(experimentParams *config.ExperimentConfig) BaseExperiment {
-	return BaseExperiment{
-		name:    experimentParams.Name,
-		metrics: nil,
+type experimentMetrics struct {
+	states []environment.State
+	mu     sync.RWMutex
+}
+
+func NewMetrics() Metrics {
+	return &experimentMetrics{
+		states: make([]environment.State, 0),
+	}
+}
+
+type BaseExperiment struct {
+	name        string
+	environment *environment.BaseEnvironment
+	config      *config.ExperimentConfig
+	mu          sync.RWMutex
+	status      status
+	metrics     Metrics
+}
+
+func (m *experimentMetrics) RecordState(state environment.State) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.states = append(m.states, state)
+}
+
+func NewBaseExperiment(experimentParams *config.ExperimentConfig, env *environment.BaseEnvironment) *BaseExperiment {
+	return &BaseExperiment{
+		name:        experimentParams.Name,
+		environment: env,
+		config:      experimentParams,
+		metrics:     NewMetrics(),
 		status: status{
 			Running: false,
 		},

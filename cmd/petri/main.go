@@ -11,6 +11,9 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/boristopalov/petri/pkg/agent"
+	"github.com/boristopalov/petri/pkg/config"
+	"github.com/boristopalov/petri/pkg/environment"
+	"github.com/boristopalov/petri/pkg/experiment"
 	"github.com/boristopalov/petri/pkg/messaging"
 	"github.com/spf13/cobra"
 )
@@ -44,7 +47,7 @@ func main() {
 func runExperiment(cmd *cobra.Command, args []string) error {
 	broker := messaging.NewBroker()
 	defer broker.Reset()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	// Handle graceful shutdown
@@ -55,67 +58,46 @@ func runExperiment(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
+	// Create experiment config
+	config := &config.ExperimentConfig{
+		Name:  "chat_room",
+		Steps: 10, // Run for 10 steps
+	}
+
+	// Create base environment
+	env := environment.NewBaseEnvironment()
+
 	// Create 3 agents
-	agents := make([]*agent.LLMAgent, 3)
-	for i := range agents {
-		agent, err := agent.NewLLMAgent(agent.WithMessageBroker(broker))
+	const NUM_AGENTS = 3
+	for i := 0; i < NUM_AGENTS; i++ {
+		a, err := agent.NewLLMAgent(
+			agent.WithMessageBroker(broker),
+			agent.WithTask("Have a friendly conversation about artificial intelligence with other agents."),
+		)
 		if err != nil {
-			return fmt.Errorf("failed to create %s: %v", agent.GetID(), err)
+			return fmt.Errorf("failed to create agent: %v", err)
 		}
-		agents[i] = agent
-		log.Printf("Created %s", agent.GetID())
+		log.Printf("Created %s", a.GetID())
+
 		// Start message handler for each agent
-		agent.StartMessageHandler(ctx)
+		a.StartMessageHandler(ctx)
+
+		// Add agent to environment
+		if err := env.AddAgent(a); err != nil {
+			return fmt.Errorf("failed to add agent to environment: %v", err)
+		}
 	}
 
-	// Start a goroutine to handle messages for each agent
-	for _, a := range agents {
-		agent := a // Create a new variable to avoid closure issues
-		go func() {
-			for {
-				select {
-				case msg := <-agent.Receive():
-					log.Printf("[%s] Received message from %s: %v", agent.GetID(), msg.From, msg.Content)
+	// Create and run experiment
+	exp := experiment.NewBaseExperiment(config, env)
 
-					// Generate a response using OpenAI
-					prompt := fmt.Sprintf("You are %s. Respond to this message from %s: %v",
-						agent.GetID(), msg.From, msg.Content)
-
-					response, err := agent.GetClient().Complete(ctx, agent.GetModel().Id, prompt)
-					if err != nil {
-						log.Printf("[%s] Error generating response: %v", agent.GetID(), err)
-						continue
-					}
-
-					// Send the response back
-					err = agent.Send(messaging.Message{
-						Content: response,
-						To:      []string{}, // broadcast to all
-					})
-					if err != nil {
-						log.Printf("[%s] Error sending response: %v", agent.GetID(), err)
-					}
-
-					// Add a small delay to prevent rate limiting
-					time.Sleep(2 * time.Second)
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
+	// Run 5 steps
+	for i := 0; i < 5; i++ {
+		time.Sleep(1 * time.Second) // avoid rate limiting
+		if err := exp.Step(ctx); err != nil {
+			return fmt.Errorf("experiment failed: %v", err)
+		}
 	}
 
-	// Have agent-1 start a conversation
-	startMsg := fmt.Sprintf("Hello everyone! I'm %s. Let's have a conversation about artificial intelligence.", agents[0].GetID())
-	err := agents[0].Send(messaging.Message{
-		Content: startMsg,
-		To:      []string{}, // broadcast to all
-	})
-	if err != nil {
-		return fmt.Errorf("failed to send initial message: %v", err)
-	}
-
-	// Let the conversation run for a while
-	time.Sleep(10 * time.Second)
 	return nil
 }

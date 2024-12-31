@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/boristopalov/petri/internal/client"
@@ -15,7 +16,7 @@ import (
 
 // Agent represents an AI agent that can interact in experiments
 type Agent interface {
-	// Generate takes an observation and returns an action
+	// Runs the agent with a prompt
 	Run(ctx context.Context) (string, error)
 }
 
@@ -27,14 +28,15 @@ type ModelInfo struct {
 type LLMAgent struct {
 	id            string
 	model         ModelInfo
-	client        LLMClient
+	task          string
+	client        ApiClient
 	memory        *memory.Memory
 	config        map[string]any
 	messageChan   chan messaging.Message
 	messageBroker messaging.Broker
 }
 
-type LLMClient interface {
+type ApiClient interface {
 	Complete(ctx context.Context, model string, prompt string) (string, error)
 }
 
@@ -44,6 +46,7 @@ type AgentParams struct {
 	Model         ModelInfo
 	AgentID       string
 	MessageBroker messaging.Broker
+	Task          string
 }
 
 type AgentOption func(*AgentParams)
@@ -78,6 +81,12 @@ func WithMessageBroker(b messaging.Broker) AgentOption {
 	}
 }
 
+func WithTask(task string) AgentOption {
+	return func(p *AgentParams) {
+		p.Task = task
+	}
+}
+
 func defaultAgentParams() *AgentParams {
 	return &AgentParams{
 		APIBaseUrl: "https://api.openai.com/v1/",
@@ -102,6 +111,7 @@ func NewLLMAgent(opts ...AgentOption) (*LLMAgent, error) {
 
 	agent := &LLMAgent{
 		id:            params.AgentID,
+		task:          params.Task,
 		model:         params.Model,
 		client:        _client,
 		memory:        memory.NewMemory(100), // short term memory - start with capacity of 100 events
@@ -127,7 +137,7 @@ func (a *LLMAgent) GetModel() ModelInfo {
 	return a.model
 }
 
-func (a *LLMAgent) GetClient() LLMClient {
+func (a *LLMAgent) GetClient() ApiClient {
 	return a.client
 }
 
@@ -135,6 +145,7 @@ func (a *LLMAgent) GetClient() LLMClient {
 func (a *LLMAgent) Send(msg messaging.Message) error {
 	msg.From = a.id
 	msg.Timestamp = time.Now()
+	log.Printf("[%s]: %s\n\n", a.id, msg.Content)
 	return a.messageBroker.Publish(msg)
 }
 
@@ -149,7 +160,6 @@ func (a *LLMAgent) StartMessageHandler(ctx context.Context) {
 		for {
 			select {
 			case msg := <-a.messageChan:
-				log.Printf("Message from %s: %v", msg.From, msg.Content)
 				// Store the message in memory
 				if err := a.memory.Store(fmt.Sprintf("Message from %s: %v", msg.From, msg.Content)); err != nil {
 					log.Printf("Failed to store message in memory: %v", err)
@@ -159,4 +169,37 @@ func (a *LLMAgent) StartMessageHandler(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (a *LLMAgent) Run(ctx context.Context) (string, error) {
+	// Generate a response based on memory and task
+	memories := a.memory.GetAllMessages()
+	var prompt string
+	if len(memories) == 0 {
+		prompt = fmt.Sprintf("You are %s. Your task is: %s\n\n Begin!",
+			a.id,
+			a.task)
+
+	} else {
+		prompt = fmt.Sprintf("You are %s. Your task is: %s\n\nRecent conversation history:\n%s\n\nBased on this context, generate a response:",
+			a.id,
+			a.task,
+			strings.Join(memories, "\n"))
+	}
+
+	response, err := a.client.Complete(ctx, a.model.Id, prompt)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate response: %v", err)
+	}
+
+	// Send the response through the message broker
+	err = a.Send(messaging.Message{
+		Content: response,
+		To:      []string{}, // broadcast to all
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to send message: %v", err)
+	}
+
+	return response, nil
 }
