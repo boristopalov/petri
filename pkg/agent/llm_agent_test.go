@@ -182,12 +182,9 @@ func TestAgentMessaging(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Verify message is in memory
-		agent1.memory.mu.RLock()
-		defer agent1.memory.mu.RUnlock()
-
 		found := false
 		expectedContent := fmt.Sprintf("Message from %s: %v", msg.From, msg.Content)
-		for _, stored := range agent1.memory.memoryStream {
+		for _, stored := range agent1.memory.GetAllMessages() {
 			if stored == expectedContent {
 				found = true
 				break
@@ -196,7 +193,7 @@ func TestAgentMessaging(t *testing.T) {
 
 		if !found {
 			t.Errorf("Message not found in memory. Expected: %s", expectedContent)
-			t.Errorf("Memory contents: %v", agent1.memory.memoryStream)
+			t.Errorf("Memory contents: %v", agent1.memory.GetAllMessages())
 		}
 	})
 }

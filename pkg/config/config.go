@@ -5,12 +5,12 @@ import (
 )
 
 type ExperimentConfig struct {
-	Name         string        `yaml:"name"`
-	Duration     time.Duration `yaml:"duration"`
-	StepInterval time.Duration `yaml:"step_interval"`
-	Agents       []AgentConfig `yaml:"agents"`
-	Environment  EnvConfig     `yaml:"environment"`
-	Logging      LogConfig     `yaml:"logging"`
+	Name        string        `yaml:"name"`
+	Duration    time.Duration `yaml:"duration"`
+	Steps       int           `yaml:"steps"`
+	Agents      []AgentConfig `yaml:"agents"`
+	Environment EnvConfig     `yaml:"environment"`
+	Logging     LogConfig     `yaml:"logging"`
 }
 
 type LogConfig struct {

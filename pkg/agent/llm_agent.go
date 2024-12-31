@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/boristopalov/petri/internal/client"
-	"github.com/boristopalov/petri/pkg/core"
+	"github.com/boristopalov/petri/pkg/memory"
 	"github.com/boristopalov/petri/pkg/messaging"
 	"github.com/google/uuid"
 )
@@ -17,13 +16,7 @@ import (
 // Agent represents an AI agent that can interact in experiments
 type Agent interface {
 	// Generate takes an observation and returns an action
-	Generate(ctx context.Context) (string, error)
-	// Observe allows the agent to process and store data
-	Observe(ctx context.Context, data string) error
-	// GetID returns the unique identifier for this agent
-	GetID() string
-	// GetModel returns information about the AI model being used
-	GetModel() ModelInfo
+	Run(ctx context.Context) (string, error)
 }
 
 type ModelInfo struct {
@@ -35,7 +28,7 @@ type LLMAgent struct {
 	id            string
 	model         ModelInfo
 	client        LLMClient
-	memory        *Memory
+	memory        *memory.Memory
 	config        map[string]any
 	messageChan   chan messaging.Message
 	messageBroker messaging.Broker
@@ -105,15 +98,13 @@ func NewLLMAgent(opts ...AgentOption) (*LLMAgent, error) {
 		opt(params)
 	}
 
-	log.Println("PARAMS: %v", params)
-
 	_client := client.GetOpenAiClient(params.APIBaseUrl, params.APIKey)
 
 	agent := &LLMAgent{
 		id:            params.AgentID,
 		model:         params.Model,
 		client:        _client,
-		memory:        NewMemory(100), // short term memory - start with capacity of 100 events
+		memory:        memory.NewMemory(100), // short term memory - start with capacity of 100 events
 		config:        make(map[string]any),
 		messageChan:   make(chan messaging.Message, 100), // Buffer 100 messages
 		messageBroker: params.MessageBroker,
@@ -134,6 +125,10 @@ func (a *LLMAgent) GetID() string {
 
 func (a *LLMAgent) GetModel() ModelInfo {
 	return a.model
+}
+
+func (a *LLMAgent) GetClient() LLMClient {
+	return a.client
 }
 
 // Send implements messaging.Sender
@@ -164,44 +159,4 @@ func (a *LLMAgent) StartMessageHandler(ctx context.Context) {
 			}
 		}
 	}()
-}
-
-func (a *LLMAgent) GetClient() LLMClient {
-	return a.client
-}
-
-func (a *LLMAgent) Generate(ctx context.Context, obs core.Observation) (core.Action, error) {
-	// TODO: Implement action generation based on observation
-	return core.Action{}, nil
-}
-
-func (a *LLMAgent) Observe(ctx context.Context, data string) error {
-	return a.memory.Store(data)
-}
-
-type Memory struct {
-	memoryStream []string
-	capacity     int
-	mu           sync.RWMutex
-}
-
-func NewMemory(capacity int) *Memory {
-	return &Memory{
-		memoryStream: make([]string, 0, capacity),
-		capacity:     capacity,
-	}
-}
-
-func (m *Memory) Store(data string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.memoryStream = append(m.memoryStream, data)
-
-	// TODO: come up with a better solution for handling capacity limitations
-	// It should likely be based on token counts
-	if len(m.memoryStream) > m.capacity {
-		m.memoryStream = m.memoryStream[1:]
-	}
-	return nil
 }

@@ -22,12 +22,6 @@ type Receiver interface {
 	Receive() <-chan Message
 }
 
-// Agent combines sending and receiving capabilities
-type Agent interface {
-	Sender
-	Receiver
-}
-
 // Broker handles message routing between agents
 type Broker interface {
 	// Publish sends a message to specified recipients

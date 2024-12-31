@@ -2,43 +2,70 @@ package experiment
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/boristopalov/petri/pkg/config"
-	"github.com/boristopalov/petri/pkg/core"
+	"github.com/boristopalov/petri/pkg/environment"
 )
 
-type BaseExperiment struct {
-	name    string
-	agents  []core.Agent
-	steps   int
-	env     core.Environment
-	metrics *Metrics
-	mu      sync.RWMutex
-	status  core.ExperimentStatus
+type Experiment interface {
+	// Run executes the experiment according to configuration
+	Run(ctx context.Context) error
+	// Stop gracefully stops the experiment
+	Stop() error
+	// GetStatus returns current experiment status
+	GetStatus() status
+
+	Step(ctx context.Context) error
 }
 
-// Logger handles logging for experiments
-type Logger struct {
-	// TODO: implement logger
+type status struct {
+	Running   bool
+	StartTime time.Time
+	EndTime   time.Time
+	Errors    []error
+}
+
+type BaseExperiment struct {
+	name        string
+	environment environment.Environment
+	config      *config.ExperimentConfig
+	metrics     Metrics
+	mu          sync.RWMutex
+	status      status
 }
 
 // Metrics tracks experiment metrics
-type Metrics struct {
-	// TODO: implement metrics
+type Metrics interface {
+	RecordState(environment.State)
 }
 
 func NewExperiment(experimentParams *config.ExperimentConfig) BaseExperiment {
 	return BaseExperiment{
 		name:    experimentParams.Name,
-		steps:   10,
-		env:     nil,
 		metrics: nil,
-		status: core.ExperimentStatus{
+		status: status{
 			Running: false,
 		},
 	}
+}
+
+func (e *BaseExperiment) Step(ctx context.Context) error {
+	// Record pre-step metrics
+	e.metrics.RecordState(e.environment.GetState())
+
+	// Let environment handle the actual simulation step
+	if err := e.environment.Step(ctx); err != nil {
+		log.Printf("Step failed: %s", err)
+		return err
+	}
+
+	// Record post-step metrics
+	e.metrics.RecordState(e.environment.GetState())
+
+	return nil
 }
 
 func (e *BaseExperiment) Run(ctx context.Context) error {
@@ -58,61 +85,17 @@ func (e *BaseExperiment) Run(ctx context.Context) error {
 }
 
 func (e *BaseExperiment) runLoop(ctx context.Context) error {
-
-	for i := 0; i < e.steps; i++ {
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				if err := e.step(ctx); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (e *BaseExperiment) step(ctx context.Context) error {
-	// Get current state
-	state := e.env.GetState()
-
-	// Collect actions from all agents
-	actions := make([]core.Action, 0, len(e.agents))
-	for _, agent := range e.agents {
-		obs := createObservation(state, agent.GetID())
-		action, err := agent.Generate(ctx, obs)
-		if err != nil {
-			return err
-		}
-		actions = append(actions, action)
-	}
-
-	// Step environment
-	observations, err := e.env.Step(ctx, actions)
-	if err != nil {
-		return err
-	}
-
-	// Update agents
-	for _, obs := range observations {
-		for _, agent := range e.agents {
-			if err := agent.Observe(ctx, core.Event{
-				Type:      "observation",
-				Content:   obs,
-				Timestamp: time.Now(),
-				AgentID:   agent.GetID(),
-			}); err != nil {
+	for i := 0; i < e.config.Steps; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if err := e.Step(ctx); err != nil {
+				log.Printf("Run loop failed: %s", err)
 				return err
 			}
+
 		}
 	}
-
 	return nil
-}
-
-func createObservation(state core.State, agentID string) core.Observation {
-	// TODO: implement observation creation
-	return core.Observation{}
 }
