@@ -1,0 +1,30 @@
+name: "chat_room_experiment"
+duration: "1h"
+step_interval: "1s"
+
+agents:
+  - model: "claude-3"
+    count: 2
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+  - model: "gpt-4"
+    count: 2
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+
+environment:
+  type: "chat_room"
+  config:
+    topic: "climate change"
+    message_delay: "1s"
+    max_messages_per_turn: 1
+
+logging:
+  level: "DEBUG"
+  path: "logs/chat_room.log"
+  metrics:
+    - "message_count"
+    - "sentiment"
+    - "agreement_rate"
