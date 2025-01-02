@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boristopalov/petri/internal/client"
 	"github.com/boristopalov/petri/pkg/memory"
 	"github.com/boristopalov/petri/pkg/messaging"
+	"github.com/boristopalov/petri/pkg/providers"
 	"github.com/google/uuid"
 )
 
@@ -29,14 +29,14 @@ type LLMAgent struct {
 	id            string
 	model         ModelInfo
 	task          string
-	client        ApiClient
+	client        Client
 	memory        *memory.Memory
 	config        map[string]any
 	messageChan   chan messaging.Message
 	messageBroker messaging.Broker
 }
 
-type ApiClient interface {
+type Client interface {
 	Complete(ctx context.Context, model string, prompt string) (string, error)
 }
 
@@ -47,6 +47,7 @@ type AgentParams struct {
 	AgentID       string
 	MessageBroker messaging.Broker
 	Task          string
+	Client        Client
 }
 
 type AgentOption func(*AgentParams)
@@ -87,6 +88,12 @@ func WithTask(task string) AgentOption {
 	}
 }
 
+func WithProvider(c Client) AgentOption {
+	return func(p *AgentParams) {
+		p.Client = c
+	}
+}
+
 func defaultAgentParams() *AgentParams {
 	return &AgentParams{
 		APIBaseUrl: "https://api.openai.com/v1/",
@@ -100,14 +107,14 @@ func defaultAgentParams() *AgentParams {
 }
 
 // NewLLMAgent creates a new LLM agent
-func NewLLMAgent(opts ...AgentOption) (*LLMAgent, error) {
+func NewLLMAgent(ctx context.Context, opts ...AgentOption) (*LLMAgent, error) {
 	params := defaultAgentParams()
 
 	for _, opt := range opts {
 		opt(params)
 	}
 
-	_client := client.GetOpenAiClient(params.APIBaseUrl, params.APIKey)
+	_client := providers.OpenAi(ctx)
 
 	agent := &LLMAgent{
 		id:            params.AgentID,
@@ -137,7 +144,7 @@ func (a *LLMAgent) GetModel() ModelInfo {
 	return a.model
 }
 
-func (a *LLMAgent) GetClient() ApiClient {
+func (a *LLMAgent) GetClient() Client {
 	return a.client
 }
 

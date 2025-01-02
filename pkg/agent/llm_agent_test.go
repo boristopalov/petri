@@ -33,9 +33,11 @@ func TestLLMAgent(t *testing.T) {
 	if apiKey == "" {
 		t.Fatalf("OPENAI_API_KEY not set")
 	}
+	ctx := context.Background()
 
 	// Create a new agent
 	agent, err := NewLLMAgent(
+		ctx,
 		WithAgentId("test-agent"),
 		WithModel(ModelInfo{Id: "gpt-4o-mini", Config: make(map[string]any)}),
 	)
@@ -58,7 +60,6 @@ func TestLLMAgent(t *testing.T) {
 	}
 
 	// Test API connection by making a simple completion request
-	ctx := context.Background()
 	response, err := agent.client.Complete(ctx, agent.model.Id, "Say hello!")
 
 	if err != nil {
@@ -70,8 +71,9 @@ func TestLLMAgent(t *testing.T) {
 }
 
 func TestAgentMessaging(t *testing.T) {
+	ctx := context.Background()
 	// Create two agents with mock clients
-	agent1, err := NewLLMAgent(WithAgentId("agent1"), WithModel(ModelInfo{
+	agent1, err := NewLLMAgent(ctx, WithAgentId("agent1"), WithModel(ModelInfo{
 		Id:     "mock-model",
 		Config: make(map[string]any),
 	}))
@@ -80,7 +82,7 @@ func TestAgentMessaging(t *testing.T) {
 	}
 	agent1.client = &MockLLMClient{} // Replace with mock client
 
-	agent2, err := NewLLMAgent(WithAgentId("agent2"), WithModel(ModelInfo{
+	agent2, err := NewLLMAgent(ctx, WithAgentId("agent2"), WithModel(ModelInfo{
 		Id:     "mock-model",
 		Config: make(map[string]any),
 	}),

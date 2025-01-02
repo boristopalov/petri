@@ -15,6 +15,7 @@ import (
 	"github.com/boristopalov/petri/pkg/environment"
 	"github.com/boristopalov/petri/pkg/experiment"
 	"github.com/boristopalov/petri/pkg/messaging"
+	"github.com/boristopalov/petri/pkg/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -71,8 +72,10 @@ func runExperiment(cmd *cobra.Command, args []string) error {
 	const NUM_AGENTS = 3
 	for i := 0; i < NUM_AGENTS; i++ {
 		a, err := agent.NewLLMAgent(
+			ctx,
 			agent.WithMessageBroker(broker),
 			agent.WithTask("Have a friendly conversation about artificial intelligence with other agents."),
+			agent.WithProvider(providers.OpenAi(ctx)),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create agent: %v", err)
