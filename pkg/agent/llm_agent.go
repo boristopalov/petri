@@ -94,7 +94,12 @@ func WithProvider(c Client) AgentOption {
 	}
 }
 
-func defaultAgentParams() *AgentParams {
+func defaultOpenAiAgentParams(ctx context.Context) (*AgentParams, error) {
+	_client, err := providers.OpenAi(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &AgentParams{
 		APIBaseUrl: "https://api.openai.com/v1/",
 		APIKey:     os.Getenv("OPENAI_API_KEY"),
@@ -103,24 +108,26 @@ func defaultAgentParams() *AgentParams {
 			Config: make(map[string]any),
 		},
 		AgentID: "agent-" + uuid.New().String(),
-	}
+		Client:  _client,
+	}, nil
 }
 
 // NewLLMAgent creates a new LLM agent
 func NewLLMAgent(ctx context.Context, opts ...AgentOption) (*LLMAgent, error) {
-	params := defaultAgentParams()
+	params, err := defaultOpenAiAgentParams(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, opt := range opts {
 		opt(params)
 	}
 
-	_client := providers.OpenAi(ctx)
-
 	agent := &LLMAgent{
 		id:            params.AgentID,
 		task:          params.Task,
 		model:         params.Model,
-		client:        _client,
+		client:        params.Client,
 		memory:        memory.NewMemory(100), // short term memory - start with capacity of 100 events
 		config:        make(map[string]any),
 		messageChan:   make(chan messaging.Message, 100), // Buffer 100 messages
@@ -130,7 +137,7 @@ func NewLLMAgent(ctx context.Context, opts ...AgentOption) (*LLMAgent, error) {
 	// Subscribe to messages
 	if err := agent.messageBroker.Subscribe(agent.id, agent.messageChan); err != nil {
 		// Handle error appropriately
-		panic(err)
+		return nil, err
 	}
 
 	return agent, nil

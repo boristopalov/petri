@@ -68,6 +68,10 @@ func runExperiment(cmd *cobra.Command, args []string) error {
 	// Create base environment
 	env := environment.NewBaseEnvironment()
 
+	openai, err := providers.OpenAi(ctx)
+	if err != nil {
+		return err
+	}
 	// Create 3 agents
 	const NUM_AGENTS = 3
 	for i := 0; i < NUM_AGENTS; i++ {
@@ -75,7 +79,7 @@ func runExperiment(cmd *cobra.Command, args []string) error {
 			ctx,
 			agent.WithMessageBroker(broker),
 			agent.WithTask("Have a friendly conversation about artificial intelligence with other agents."),
-			agent.WithProvider(providers.OpenAi(ctx)),
+			agent.WithProvider(openai),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create agent: %v", err)

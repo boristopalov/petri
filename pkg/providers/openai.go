@@ -2,40 +2,18 @@ package providers
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 )
 
-type OpenAIClient struct {
+type openAIClient struct {
 	client *openai.Client
 }
 
-func newOpenAIClient(ctx context.Context, params ProviderParams) *OpenAIClient {
-	var client *openai.Client
-	if params.BaseURL == "" {
-		params.BaseURL = "https://api.openai.com/v1/"
-	}
-	if params.APIKey != "" {
-		client = openai.NewClient(
-			option.WithAPIKey(params.APIKey),
-			option.WithBaseURL(params.BaseURL),
-		)
-	} else {
-		client = openai.NewClient(
-			option.WithBaseURL(params.BaseURL),
-		)
-	}
-	log.Println("Using Base URL", params.BaseURL)
-	return &OpenAIClient{
-		client: client,
-	}
-}
-
-func OpenAi(ctx context.Context, opts ...ProviderOption) *OpenAIClient {
-	// Use singleton pattern to ensure only one client instance
+func OpenAi(ctx context.Context, opts ...ProviderOption) (*openAIClient, error) {
 	params := &ProviderParams{}
 
 	// Apply all options
@@ -44,19 +22,30 @@ func OpenAi(ctx context.Context, opts ...ProviderOption) *OpenAIClient {
 	}
 
 	// Set defaults and environment fallbacks
-	if params.BaseURL == "" {
-		params.BaseURL = os.Getenv("OPENAI_API_BASE_URL")
-		if params.BaseURL == "" {
-			params.BaseURL = "https://api.openai.com/v1/" // Default OpenAI API endpoint
+	baseUrl := params.BaseURL
+	if baseUrl == "" {
+		baseUrl = os.Getenv("OPENAI_API_BASE_URL")
+		if baseUrl == "" {
+			baseUrl = "https://api.openai.com/v1/" // Default OpenAI API endpoint
 		}
 	}
-	if params.APIKey == "" {
-		params.APIKey = os.Getenv("OPENAI_API_KEY")
+	apiKey := params.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
-	return newOpenAIClient(ctx, *params)
+	if apiKey == "" {
+		return nil, fmt.Errorf("Error retrieving OPENAI_API_KEY")
+	}
+	client := openai.NewClient(
+		option.WithAPIKey(apiKey),
+		option.WithBaseURL(baseUrl),
+	)
+	return &openAIClient{
+		client: client,
+	}, nil
 }
 
-func (c *OpenAIClient) Complete(ctx context.Context, model string, prompt string) (string, error) {
+func (c *openAIClient) Complete(ctx context.Context, model string, prompt string) (string, error) {
 	chatCompletion, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(prompt),
