@@ -1,4 +1,4 @@
-# Petri
+# Petri (WIP)
 
 A framework for running multi-agent experiments and observing how they interact. 
 
