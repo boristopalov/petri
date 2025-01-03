@@ -1,6 +1,6 @@
 # Petri
 
-An orchestrator framework for multi-agent LLM apps, intended to be used for observing AI-to-AI interactions.
+A framework for running multi-agent experiments and observing how they interact. 
 
 ## Overview
 

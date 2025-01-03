@@ -12,7 +12,14 @@ type GeminiClient struct {
 	client *genai.Client
 }
 
-func Gemini(ctx context.Context, params ProviderParams) (*GeminiClient, error) {
+func Gemini(ctx context.Context, opts ...ProviderOption) (*GeminiClient, error) {
+	params := &ProviderParams{}
+
+	// Apply all options
+	for _, opt := range opts {
+		opt(params)
+	}
+
 	apiKey := params.APIKey
 	if apiKey == "" {
 		apiKey = os.Getenv("GEMINI_API_KEY")
