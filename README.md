@@ -1,13 +1,14 @@
 # Petri
 
-A framework for running experiments with interacting AI agents. Named after "petri dish", as it provides an environment for observing AI agent interactions and emergent behaviors.
+An orchestrator framework for multi-agent LLM apps, intended to be used for observing AI-to-AI interactions.
 
 ## Overview
 
-Petri allows researchers to:
+Petri allows you to:
 
 - Create experiments with multiple AI agents
 - Define custom interaction environments
+- Control interactions by "stepping through" experiments
 - Collect metrics and analyze results
 - Study emergent behaviors and cultural evolution
 
