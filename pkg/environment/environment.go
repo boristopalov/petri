@@ -10,81 +10,80 @@ import (
 	"github.com/boristopalov/petri/pkg/agent"
 )
 
-type State struct {
-	status    string
-	step      uint32
-	timestamp time.Time
+// State represents the basic state any environment must track
+type State interface {
+	GetStatus() string
+	GetStep() uint32
+	GetTimestamp() time.Time
 }
 
-// Environment defines the rules and mechanics of agent interactions
-type Environment interface {
+// BaseState provides a basic implementation of State
+type BaseState struct {
+	Status    string
+	Step      uint32
+	Timestamp time.Time
+}
+
+func (s BaseState) GetStatus() string {
+	return s.Status
+}
+
+func (s BaseState) GetStep() uint32 {
+	return s.Step
+}
+
+func (s BaseState) GetTimestamp() time.Time {
+	return s.Timestamp
+}
+
+// Environment defines the basic interface any environment must implement
+type Environment[A agent.Agent, S State] interface {
 	// GetState returns the current environment state
-	GetState() State
+	GetState() S
 	// Reset resets the environment to initial conditions
 	Reset() error
 	// AddAgent registers a new agent in the environment
-	AddAgent(agent agent.Agent) error
+	AddAgent(agent A) error
 	// RemoveAgent removes an agent from the environment
-	RemoveAgent(agent agent.Agent) error
-	// Gets the list of agents in the env
-	GetAgents(agent agent.Agent) ([]agent.Agent, error)
+	RemoveAgent(agent A) error
+	// GetAgents returns all agents in the environment
+	GetAgents() []A
 	// Step advances the environment by one timestep
 	Step(ctx context.Context) error
 }
 
-type BaseEnvironment struct {
-	agents []agent.Agent
-	state  State
+// BaseEnvironment provides common environment functionality
+type BaseEnvironment[A agent.Agent, S State] struct {
+	agents []A
+	state  S
+	mu     sync.RWMutex
 }
 
-func NewBaseEnvironment() *BaseEnvironment {
-	return &BaseEnvironment{
-		agents: make([]agent.Agent, 0),
-		state: State{
-			status:    "idle",
-			step:      0,
-			timestamp: time.Now(),
-		},
+func NewBaseEnvironment[A agent.Agent, S State](initialState S) *BaseEnvironment[A, S] {
+	return &BaseEnvironment[A, S]{
+		agents: make([]A, 0),
+		state:  initialState,
 	}
 }
 
-func (e *BaseEnvironment) GetState() State {
+func (e *BaseEnvironment[A, S]) GetState() S {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.state
 }
 
-func (e *BaseEnvironment) Step(ctx context.Context) error {
-	// state := e.GetState()
-	e.state.status = "running"
-	e.state.step++
-	e.state.timestamp = time.Now()
-
-	// Wait for each agent to run
-	var wg sync.WaitGroup
-	for _, a := range e.agents {
-		wg.Add(1)
-		go func(a agent.Agent) {
-			defer wg.Done()
-			_, err := a.Run(ctx)
-			if err != nil {
-				log.Printf("error running agent: %s", err)
-			}
-		}(a)
-		// Process the action and update state accordingly
-		// ...
-	}
-
-	wg.Wait()
-	return nil
-}
-
-func (e *BaseEnvironment) AddAgent(agent agent.Agent) error {
+func (e *BaseEnvironment[A, S]) AddAgent(agent A) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.agents = append(e.agents, agent)
 	return nil
 }
 
-func (e *BaseEnvironment) RemoveAgent(agent agent.Agent) error {
+func (e *BaseEnvironment[A, S]) RemoveAgent(agent A) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	for i, a := range e.agents {
-		if a == agent {
+		if a.GetID() == agent.GetID() {
 			e.agents = append(e.agents[:i], e.agents[i+1:]...)
 			return nil
 		}
@@ -92,16 +91,36 @@ func (e *BaseEnvironment) RemoveAgent(agent agent.Agent) error {
 	return fmt.Errorf("agent not found")
 }
 
-func (e *BaseEnvironment) GetAgents() []agent.Agent {
+func (e *BaseEnvironment[A, S]) GetAgents() []A {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.agents
 }
 
-func (e *BaseEnvironment) Reset() error {
-	e.agents = make([]agent.Agent, 0)
-	e.state = State{
-		status:    "idle",
-		step:      0,
-		timestamp: time.Now(),
+func (e *BaseEnvironment[A, S]) Reset() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.agents = make([]A, 0)
+	return nil
+}
+
+// Step provides basic step functionality - derived environments should override this
+func (e *BaseEnvironment[A, S]) Step(ctx context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, a := range e.agents {
+		wg.Add(1)
+		go func(a A) {
+			defer wg.Done()
+			_, err := a.Run(ctx)
+			if err != nil {
+				log.Printf("error running agent: %s", err)
+			}
+		}(a)
 	}
+
+	wg.Wait()
 	return nil
 }

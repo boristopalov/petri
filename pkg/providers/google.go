@@ -25,7 +25,7 @@ func Gemini(ctx context.Context, opts ...ProviderOption) (*GeminiClient, error) 
 		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("Error retrieving GEMINI_API_KEY")
+		return nil, fmt.Errorf("error retrieving GEMINI_API_KEY")
 	}
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
@@ -39,7 +39,7 @@ func Gemini(ctx context.Context, opts ...ProviderOption) (*GeminiClient, error) 
 	}, nil
 }
 
-func (c *GeminiClient) Complete(ctx context.Context, model string, prompt string) (string, error) {
+func (c *GeminiClient) Complete(ctx context.Context, model string, prompt string, systemPrompt string, history []string) (string, error) {
 	parts := []*genai.Part{
 		{Text: prompt},
 	}

@@ -18,6 +18,8 @@ import (
 type Agent interface {
 	// Runs the agent with a prompt
 	Run(ctx context.Context) (string, error)
+	// Gets the agent's unique ID
+	GetID() string
 }
 
 type ModelInfo struct {
@@ -37,7 +39,7 @@ type LLMAgent struct {
 }
 
 type Client interface {
-	Complete(ctx context.Context, model string, prompt string) (string, error)
+	Complete(ctx context.Context, model string, prompt string, systemPrompt string, history []string) (string, error)
 }
 
 type AgentParams struct {
@@ -201,7 +203,7 @@ func (a *LLMAgent) Run(ctx context.Context) (string, error) {
 			strings.Join(memories, "\n"))
 	}
 
-	response, err := a.client.Complete(ctx, a.model.Id, prompt)
+	response, err := a.client.Complete(ctx, a.model.Id, prompt, "", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate response: %v", err)
 	}

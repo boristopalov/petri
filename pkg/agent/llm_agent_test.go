@@ -15,7 +15,7 @@ import (
 // MockLLMClient implements LLMClient interface for testing
 type MockLLMClient struct{}
 
-func (m *MockLLMClient) Complete(ctx context.Context, model string, prompt string) (string, error) {
+func (m *MockLLMClient) Complete(ctx context.Context, model string, prompt string, systemPrompt string, history []string) (string, error) {
 	return "mock response", nil
 }
 
@@ -60,7 +60,7 @@ func TestLLMAgent(t *testing.T) {
 	}
 
 	// Test API connection by making a simple completion request
-	response, err := agent.client.Complete(ctx, agent.model.Id, "Say hello!")
+	response, err := agent.client.Complete(ctx, agent.model.Id, "Say hello!", "", []string{})
 
 	if err != nil {
 		t.Fatalf("Failed to complete request: %v", err)

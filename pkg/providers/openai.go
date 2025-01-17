@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/openai/openai-go"
@@ -34,7 +35,7 @@ func OpenAi(ctx context.Context, opts ...ProviderOption) (*openAIClient, error) 
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("Error retrieving OPENAI_API_KEY")
+		return nil, fmt.Errorf("error retrieving OPENAI_API_KEY")
 	}
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
@@ -45,14 +46,27 @@ func OpenAi(ctx context.Context, opts ...ProviderOption) (*openAIClient, error) 
 	}, nil
 }
 
-func (c *openAIClient) Complete(ctx context.Context, model string, prompt string) (string, error) {
+func (c *openAIClient) Complete(ctx context.Context, model string, prompt string, systemPrompt string, history []string) (string, error) {
+	log.Printf("Making OpenAI API call with model: %s", model)
+
+	messages := []openai.ChatCompletionMessageParamUnion{
+		openai.SystemMessage(systemPrompt),
+	}
+
+	// Add history as assistant messages
+	for _, msg := range history {
+		messages = append(messages, openai.AssistantMessage(msg))
+	}
+
+	// Add current prompt as the final user message
+	messages = append(messages, openai.UserMessage(prompt))
+
 	chatCompletion, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Messages: openai.F([]openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage(prompt),
-		}),
-		Model: openai.F(model),
+		Messages: openai.F(messages),
+		Model:    openai.F(model),
 	})
 	if err != nil {
+		log.Printf("OpenAI API error: %v", err)
 		return "", err
 	}
 	return chatCompletion.Choices[0].Message.Content, nil
